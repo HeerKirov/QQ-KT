@@ -2,7 +2,7 @@ package com.heerkirov.qq.utils
 
 import java.awt.*
 
-class TableLayout(val rowDefine:Array<Weight> = arrayOf(wAuto()),
+class TableGrid(val rowDefine:Array<Weight> = arrayOf(wAuto()),
         val columnDefine:Array<Weight> = arrayOf(wAuto())) : Container() {
     private val container:Container = this
     private val layout:GridBagLayout by lazy {

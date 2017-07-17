@@ -31,7 +31,7 @@ public class Application {
             public void onDiscussMessage(DiscussMessage message) {
                 System.out.println(message.getContent());
             }
-        });
+        }, null);
         //登录成功后便可以编写你自己的业务逻辑了
         List<Category> categories = client.getFriendListWithCategory();
         for (Category category : categories) {

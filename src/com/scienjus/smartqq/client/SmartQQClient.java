@@ -63,35 +63,94 @@ public class SmartQQClient implements Closeable {
     //线程开关
     private volatile boolean pollStarted;
 
-    public SmartQQClient(final MessageCallback callback) {
-        this.client = Client.pooled().maxPerRoute(5).maxTotal(10).build();
-        this.session = client.session();
-        login();
-        if (callback != null) {
-            this.pollStarted = true;
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    while (true) {
-                        if (!pollStarted) {
-                            return;
-                        }
-                        try {
-                            pollMessage(callback);
-                        } catch (RequestException e) {
-                            //忽略SocketTimeoutException
-                            if (!(e.getCause() instanceof SocketTimeoutException)) {
-                                LOGGER.error(e.getMessage());
-                            }
-                        } catch (Exception e) {
-                            LOGGER.error(e.getMessage());
-                        }
-                    }
-                }
-            }).start();
-        }
+    private QRCodeDelegate qrcodedelegate;
+    private MessageCallback callback;
+    private VerifyDelegate verifydelegate;
+    private MessageSendCallBack sendcallback;
+
+    public void setQRCodeDelegate(QRCodeDelegate qr){
+        qrcodedelegate = qr;
+    }
+    public QRCodeDelegate getQRCodeDelegate(){
+        return qrcodedelegate;
+    }
+    public void setMessageCallback(MessageCallback cb){
+        callback=cb;
+    }
+    public MessageCallback getMessageCallback(){
+        return callback;
+    }
+    public void setVerifyDelegate(VerifyDelegate vd){
+        verifydelegate=vd;
+    }
+    public VerifyDelegate getVerifyDelegate(){
+        return verifydelegate;
+    }
+    public void setSendCallback(MessageSendCallBack scb){
+        sendcallback=scb;
+    }
+    public MessageSendCallBack getSendCallBack(){
+        return sendcallback;
     }
 
+    public interface QRCodeDelegate {
+        void run(String filepath);
+    }
+    public interface VerifyDelegate{
+        void returns(boolean success, UserInfo userinfo);
+    }
+
+    public interface MessageSendCallBack{
+        void callback(boolean success);
+    }
+
+    public SmartQQClient(){
+        this(null, null);
+    }
+
+    public SmartQQClient(final MessageCallback callback){
+        this(callback, null);
+    }
+
+    public SmartQQClient(final MessageCallback callback, final QRCodeDelegate qrcodedelegate) {
+        this.client = Client.pooled().maxPerRoute(5).maxTotal(10).build();
+        this.session = client.session();
+        this.callback = callback;
+        this.qrcodedelegate = qrcodedelegate;
+
+    }
+
+    public void link(){
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                login();
+                if (callback != null) {
+                    pollStarted = true;
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            while (true) {
+                                if (!pollStarted) {
+                                    return;
+                                }
+                                try {
+                                    pollMessage(callback);
+                                } catch (RequestException e) {
+                                    //忽略SocketTimeoutException
+                                    if (!(e.getCause() instanceof SocketTimeoutException)) {
+                                        LOGGER.error(e.getMessage());
+                                    }
+                                } catch (Exception e) {
+                                    LOGGER.error(e.getMessage());
+                                }
+                            }
+                        }
+                    }).start();
+                }
+            }
+        }).start();
+    }
     /**
      * 登录
      */
@@ -104,6 +163,7 @@ public class SmartQQClient implements Closeable {
         getFriendStatus(); //修复Api返回码[103]的问题
         //登录成功欢迎语
         UserInfo userInfo = getAccountInfo();
+        verifydelegate.returns(true, userInfo);
         LOGGER.info(userInfo.getNick() + "，欢迎！");
     }
 
@@ -129,13 +189,18 @@ public class SmartQQClient implements Closeable {
         }
         LOGGER.info("二维码已保存在 " + filePath + " 文件中，请打开手机QQ并扫描二维码");
 
-        //使用默认软件打开二维码
-        Desktop desk = Desktop.getDesktop();
-        try {
-            File file = new File(filePath);
-            desk.open(file);
-        } catch (Exception e) {
-            e.printStackTrace();
+        if(qrcodedelegate==null){
+            //使用默认软件打开二维码
+            Desktop desk = Desktop.getDesktop();
+            try {
+                File file = new File(filePath);
+                desk.open(file);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }else{
+            //调用回调函数
+            qrcodedelegate.run(filePath);
         }
     }
 
@@ -166,6 +231,7 @@ public class SmartQQClient implements Closeable {
                 }
             } else if (result.contains("已失效")) {
                 LOGGER.info("二维码已失效，尝试重新获取二维码");
+                verifydelegate.returns(false, null);
                 getQRCode();
             }
         }
@@ -278,7 +344,7 @@ public class SmartQQClient implements Closeable {
         r.put("psessionid", psessionid);
 
         Response<String> response = postWithRetry(ApiURL.SEND_MESSAGE_TO_GROUP, r);
-        checkSendMsgResult(response);
+        checkSendMsgResult(this, response);
     }
 
     /**
@@ -299,7 +365,7 @@ public class SmartQQClient implements Closeable {
         r.put("psessionid", psessionid);
 
         Response<String> response = postWithRetry(ApiURL.SEND_MESSAGE_TO_DISCUSS, r);
-        checkSendMsgResult(response);
+        checkSendMsgResult(this, response);
     }
 
     /**
@@ -320,7 +386,7 @@ public class SmartQQClient implements Closeable {
         r.put("psessionid", psessionid);
 
         Response<String> response = postWithRetry(ApiURL.SEND_MESSAGE_TO_FRIEND, r);
-        checkSendMsgResult(response);
+        checkSendMsgResult(this, response);
     }
 
     /**
@@ -655,9 +721,10 @@ public class SmartQQClient implements Closeable {
     }
 
     //检查消息是否发送成功
-    private static void checkSendMsgResult(Response<String> response) {
+    private static void checkSendMsgResult(SmartQQClient th, Response<String> response) {
         if (response.getStatusCode() != 200) {
             LOGGER.error(String.format("发送失败，Http返回码[%d]", response.getStatusCode()));
+            th.sendcallback.callback(true);
         }
         JSONObject json = JSON.parseObject(response.getBody());
         Integer errCode = json.getInteger("errCode");
