@@ -93,7 +93,6 @@ class iMessage(val time:Long,
             val dt = Date(time * 1000)
             return sdf.format(dt)
         }
-
     override fun toString(): String = "[$format_time]$username : $content\n"
 }
 

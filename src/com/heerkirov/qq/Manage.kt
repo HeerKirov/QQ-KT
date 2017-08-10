@@ -33,7 +33,7 @@ object QQ{
             if(groupuser!=null){
                 val person = friends_all[groupuser.uin]
                 val msg = if(groupuser.card.isNullOrEmpty()&&person!=null)
-                    iMessage(message.time, person.getTypeTitle(), message.content, group, person)
+                    iMessage(message.time, person.getTitle(), message.content, group, person)
                 else if(groupuser.card.isNullOrEmpty())
                     iMessage(message.time, groupuser.card, message.content, group, null)
                 else
@@ -55,7 +55,7 @@ object QQ{
             if(discussuser!=null){
                 val person = friends_all[discussuser.uin]
                 val msg = if(person!=null)
-                    iMessage(message.time, person.getTypeTitle(), message.content, discuss, person)
+                    iMessage(message.time, person.getTitle(), message.content, discuss, person)
                 else
                     iMessage(message.time, discussuser.nick, message.content, discuss, null)
                 discuss.getMessageList().add(msg)

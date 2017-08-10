@@ -5,9 +5,6 @@ import com.scienjus.smartqq.callback.MessageCallback
 import com.scienjus.smartqq.client.SmartQQClient
 import com.scienjus.smartqq.model.*
 import java.awt.*
-import java.awt.event.ItemEvent
-import java.awt.event.MouseAdapter
-import java.awt.event.WindowAdapter
 import javax.swing.*
 import javax.swing.UIManager
 import javax.swing.event.ListSelectionListener
@@ -17,6 +14,8 @@ import java.util.*
 import javax.imageio.ImageIO
 import javax.swing.Timer
 import kotlin.collections.HashMap
+import com.sun.java.accessibility.util.AWTEventMonitor.addWindowListener
+import java.awt.event.*
 
 
 interface Queryable{
@@ -105,6 +104,16 @@ object MainWindow : JFrame("QQ-KT"), Queryable{
     }
 
     private fun BuildEvent(){
+        addWindowListener(object : WindowAdapter() {
+            override fun windowClosing(e: WindowEvent?) {
+                super.windowClosing(e)
+                QQ.client.close()
+            }
+        })
+        addWindowStateListener{
+            println("Window state to ${it.newState}")
+            window_state = it.newState
+        }
         queryButton("recent-btn").addMouseListener(MouseClick{
             queryCardGrid("top-select").goto("recent")
             select_top = RECENT
@@ -209,6 +218,7 @@ object MainWindow : JFrame("QQ-KT"), Queryable{
             Send()
         })
 
+
     }
 
     private fun BuildClient(){
@@ -249,9 +259,8 @@ object MainWindow : JFrame("QQ-KT"), Queryable{
                 if(talker==msg.belong){  // 现在正在查看更新的消息的拥有者
                     val textfield = queryText("talk-text")
                     textfield.text += msg.toString()
-                }else{
-                    // todo 给出提醒信息
                 }
+                SendNotice(msg)
                 updateFriendList(RECENT)
             }
         }
@@ -261,6 +270,9 @@ object MainWindow : JFrame("QQ-KT"), Queryable{
     const val FRIENDS = 1
     const val DISCUSSIONS = 2
     const val GROUPS = 3
+
+    //记录窗口的最小化状态
+    private var window_state:Int = 1
 
     // 用于记录现在正在显示的选项卡
     private var select_top:Int = 0
@@ -406,6 +418,17 @@ object MainWindow : JFrame("QQ-KT"), Queryable{
                 updateFriendList(RECENT)
             }
             input.text = ""
+        }
+    }
+
+    private fun SendNotice(msg:iMessage){
+        // 推送系统通知
+        if(msg.belong!=null){
+            println("send notice for (${msg.belong.getTypeTitle()})")
+            if(msg.belong is iGroup||msg.belong is iDiscuss){
+                osUtils.SendNotice(msg.belong.getTitle(), "${msg.username}: ${msg.content}")
+            }else
+                osUtils.SendNotice(msg.belong.getTitle(), msg.content)
         }
     }
 }
